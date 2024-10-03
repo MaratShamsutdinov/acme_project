@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Заявка принята
+{% endblock %}
+
+{% block content %}
+  <h1>Ваша заявка принята!, {{ request.GET.first_name }}</h1>
+{% endblock %}
