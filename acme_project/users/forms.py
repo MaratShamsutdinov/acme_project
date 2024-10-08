@@ -15,7 +15,4 @@ class CustomUserCreationForm(UserCreationForm):
     # Так этот класс будет не перезаписан, а расширен.
     class Meta(UserCreationForm.Meta):
         model = User
-        fields = (
-            'username',
-            'email'
-        )
+        fields = ('username', 'email')

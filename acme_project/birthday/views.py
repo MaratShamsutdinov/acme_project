@@ -1,9 +1,10 @@
 # from django.core.paginator import Paginator
-
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404, redirect
-
+# from django.shortcuts import get_object_or_404, redirect, render
 # from django.http import
+# from django.contrib.auth.decorators import login_required
+
+
+from django.shortcuts import get_object_or_404
 
 from django.urls import reverse
 
@@ -19,18 +20,111 @@ from django.views.generic import (
     DeleteView,
     DetailView,
     ListView,
-    UpdateView
-    )
+    UpdateView,
+)
 
 from django.urls import reverse_lazy
 
-# from django.shortcuts import get_object_or_404, redirect, render
 
-from . import (
-    forms,
-    models,
-    utils
+from . import forms, models, utils
+
+
+class OnlyAuthorMixin(UserPassesTestMixin):
+
+    def test_func(self):
+        obj = self.get_object()
+        return obj.author == self.request.user
+
+
+class BirthdayListView(ListView):
+    # Указываем модель, с которой работает CBV...
+    model = models.Birthday
+    # По умолчанию этот класс
+    # выполняет запрос queryset = Birthday.objects.all(),
+    # но мы его переопределим:
+    queryset = models.Birthday.objects.prefetch_related(
+        'tags',
+    ).select_related(
+        'author',
     )
+    # ...сортировку, которая будет применена при выводе списка объектов:
+    ordering = ['birthday']
+    # ...и даже настройки пагинации:
+    paginate_by = 4
+
+
+class BirthdayCreateView(LoginRequiredMixin, CreateView):
+
+    # Указываем модель, с которой работает CBV...
+    model = models.Birthday
+    # Указываем имя формы:
+    form_class = forms.BirthdayForm
+
+    def form_valid(self, form):
+        # Присвоить полю author объект пользователя из запроса.
+        form.instance.author = self.request.user
+        # Вызываем обязательный метод form_valid,
+        # который вернет форму, если она валидна.
+        return super().form_valid(form)
+
+
+class BirthdayUpdateView(OnlyAuthorMixin, LoginRequiredMixin, UpdateView):
+
+    model = models.Birthday
+    form_class = forms.BirthdayForm
+
+
+class BirthdayDetailView(DetailView):
+    model = models.Birthday
+
+    def get_context_data(self, **kwargs):
+        # Получаем словарь контекста:
+        context = super().get_context_data(**kwargs)
+        # Добавляем в словарь новый ключ:
+        # ключ 'birthday_countdown' и содержимое - дни до дня рождения.
+        context['birthday_countdown'] = utils.calculate_birthday_countdown(
+            # Дату рождения берём из объекта в словаре context:
+            self.object.birthday
+        )
+        # Записываем в переменную form пустой объект формы.
+        context['form'] = CongratulationForm()
+        # Запрашиваем все поздравления для выбранного дня рождения.
+        context['congratulations'] = (
+            # Дополнительно подгружаем авторов комментариев,
+            # чтобы избежать множества запросов к БД.
+            self.object.congratulations.select_related('author')
+        )
+        # Возвращаем словарь контекста.
+        return context
+
+
+class BirthdayDeleteView(OnlyAuthorMixin, LoginRequiredMixin, DeleteView):
+    model = models.Birthday
+    success_url = reverse_lazy('birthday:list')
+
+
+class CongratulationCreateView(LoginRequiredMixin, CreateView):
+    birthday = None
+    model = models.Congratulation
+    form_class = CongratulationForm
+
+    # Переопределяем dispatch()
+    def dispatch(self, request, *args, **kwargs):
+        self.birthday = get_object_or_404(models.Birthday, pk=kwargs['pk'])
+        return super().dispatch(request, *args, **kwargs)
+
+    # Переопределяем form_valid()
+    def form_valid(self, form):
+        form.instance.author = self.request.user
+        form.instance.birthday = self.birthday
+        return super().form_valid(form)
+
+    # Переопределяем get_success_url()
+    def get_success_url(self):
+        return reverse(
+            'birthday:detail',
+            kwargs={'pk': self.birthday.pk},
+        )
 
 
 # @login_required
@@ -74,61 +168,31 @@ from . import (
 #    # Явным образом указываем шаблон:
 #    # template_name = 'birthday/birthday.html'
 
-class OnlyAuthorMixin(UserPassesTestMixin):
 
-    def test_func(self):
-        object = self.get_object()
-        return object.author == self.request.user
+# class BirthdayCreateView(LoginRequiredMixin, CreateView):
+#     # success_url = reverse_lazy('birthday:list')
+#     # Указываем поля, которые должны быть в форме:
+#     # fields = '__all__'
+#     # template_name = 'birthday/birthday.html'
 
+#     # Указываем модель, с которой работает CBV...
+#     model = models.Birthday
+#     # Указываем имя формы:
+#     form_class = forms.BirthdayForm
 
-class BirthdayCreateView(LoginRequiredMixin, CreateView):
-    # success_url = reverse_lazy('birthday:list')
-    # Указываем поля, которые должны быть в форме:
-    # fields = '__all__'
-    # template_name = 'birthday/birthday.html'
-
-    # Указываем модель, с которой работает CBV...
-    model = models.Birthday
-    # Указываем имя формы:
-    form_class = forms.BirthdayForm
-
-    def form_valid(self, form):
-        # Присвоить полю author объект пользователя из запроса.
-        form.instance.author = self.request.user
-        # Вызываем обязательный метод form_valid,
-        # который вернет форму, если она валидна.
-        return super().form_valid(form)
+#     def form_valid(self, form):
+#         # Присвоить полю author объект пользователя из запроса.
+#         form.instance.author = self.request.user
+#         # Вызываем обязательный метод form_valid,
+#         # который вернет форму, если она валидна.
+#         return super().form_valid(form)
 
 
-class BirthdayUpdateView(OnlyAuthorMixin, LoginRequiredMixin, UpdateView):
-    # success_url = reverse_lazy('birthday:list')
-    # template_name = 'birthday/birthday.html'
-    model = models.Birthday
-    form_class = forms.BirthdayForm
-
-
-class BirthdayDetailView(DetailView):
-    model = models.Birthday
-
-    def get_context_data(self, **kwargs):
-        # Получаем словарь контекста:
-        context = super().get_context_data(**kwargs)
-        # Добавляем в словарь новый ключ:
-        # ключ 'birthday_countdown' и содержимое - дни до дня рождения.
-        context['birthday_countdown'] = utils.calculate_birthday_countdown(
-            # Дату рождения берём из объекта в словаре context:
-            self.object.birthday
-        )
-        # Записываем в переменную form пустой объект формы.
-        context['form'] = CongratulationForm()
-        # Запрашиваем все поздравления для выбранного дня рождения.
-        context['congratulations'] = (
-            # Дополнительно подгружаем авторов комментариев,
-            # чтобы избежать множества запросов к БД.
-            self.object.congratulations.select_related('author')
-        )
-        # Возвращаем словарь контекста.
-        return context
+# class BirthdayUpdateView(OnlyAuthorMixin, LoginRequiredMixin, UpdateView):
+#     # success_url = reverse_lazy('birthday:list')
+#     # template_name = 'birthday/birthday.html'
+#     model = models.Birthday
+#     form_class = forms.BirthdayForm
 
 
 # def delete_birthday(request, pk):
@@ -146,11 +210,6 @@ class BirthdayDetailView(DetailView):
 #         return redirect('birthday:list')
 #     # Если был получен GET-запрос — отображаем форму.
 #     return render(request, 'birthday/birthday.html', context)
-
-
-class BirthdayDeleteView(OnlyAuthorMixin, LoginRequiredMixin, DeleteView):
-    model = models.Birthday
-    success_url = reverse_lazy('birthday:list')
 
 
 # def accepted(request):
@@ -172,15 +231,6 @@ class BirthdayDeleteView(OnlyAuthorMixin, LoginRequiredMixin, DeleteView):
 #     return render(request, 'birthday/birthday_list.html', context)
 
 
-class BirthdayListView(ListView):
-    # Указываем модель, с которой работает CBV...
-    model = models.Birthday
-    # ...сортировку, которая будет применена при выводе списка объектов:
-    ordering = ['birthday']
-    # ...и даже настройки пагинации:
-    paginate_by = 4
-
-
 # @login_required
 # def add_comment(request, pk):
 #     # Получаем объект дня рождения или выбрасываем 404 ошибку.
@@ -198,24 +248,3 @@ class BirthdayListView(ListView):
 #         congratulation.save()
 #     # Перенаправляем пользователя назад, на страницу дня рождения.
 #     return redirect('birthday:detail', pk=pk)
-
-
-class CongratulationCreateView(LoginRequiredMixin, CreateView):
-    birthday = None
-    model = models.Congratulation
-    form_class = CongratulationForm
-
-    # Переопределяем dispatch()
-    def dispatch(self, request, *args, **kwargs):
-        self.birthday = get_object_or_404(models.Birthday, pk=kwargs['pk'])
-        return super().dispatch(request, *args, **kwargs)
-
-    # Переопределяем form_valid()
-    def form_valid(self, form):
-        form.instance.author = self.request.user
-        form.instance.birthday = self.birthday
-        return super().form_valid(form)
-
-    # Переопределяем get_success_url()
-    def get_success_url(self):
-        return reverse('birthday:detail', kwargs={'pk': self.birthday.pk})

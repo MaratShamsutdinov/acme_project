@@ -2,7 +2,6 @@ from django import forms
 
 from django.core.exceptions import ValidationError
 
-from . import models, validators
 
 # Импорт функции для отправки почты.
 from django.core.mail import send_mail
@@ -21,21 +20,12 @@ class BirthdayForm(forms.ModelForm):
             'birthday',
             'description',
             'image',
-            'tags'
+            'tags',
         ]
         widgets = {
-            'description': forms.Textarea(
-                attrs={
-                    'rows': 3,
-                    'cols': 50
-                    }
-                    ),
-            'birthday': forms.DateInput(
-                attrs={
-                    'type': 'date'
-                    }
-                    ),
-                }
+            'description': forms.Textarea(attrs={'rows': 3, 'cols': 50}),
+            'birthday': forms.DateInput(attrs={'type': 'date'}),
+        }
 
     def clean_first_name(self):
         first_name = self.cleaned_data['first_name']
@@ -47,7 +37,7 @@ class BirthdayForm(forms.ModelForm):
         last_name = self.cleaned_data['last_name']
         if f'{first_name} {last_name}' in BEATLES:
 
-            # Отправляем письмо, если кто-то представляется 
+            # Отправляем письмо, если кто-то представляется
             # именем одного из участников Beatles.
             send_mail(
                 subject='Another Beatles member',
